@@ -1,0 +1,43 @@
+BasedOnStyle: LLVM
+
+#Not supported on clang 3.8.0
+#SpaceAfterTemplateKeyword : false
+AlwaysBreakTemplateDeclarations: true
+
+AccessModifierOffset: -2
+
+PointerAlignment: Right
+AlignAfterOpenBracket: Align
+AlignEscapedNewlinesLeft: false
+#AlignConsecutiveDeclarations: true
+#AlignConsecutiveAssignments: true
+AlignOperands: true
+AlignTrailingComments: true
+SpacesBeforeTrailingComments: 1
+
+AllowShortBlocksOnASingleLine: false
+AllowShortFunctionsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+TabWidth: 4
+IndentWidth: 4
+UseTab: Always
+
+ColumnLimit: 100
+
+SortIncludes: true
+
+BreakBeforeBraces: 'Allman'
+# BraceWrapping: {
+#     AfterClass: 'false'
+#     AfterControlStatement: 'false'
+#     AfterEnum : 'false'
+#     AfterFunction : 'false'
+#     AfterNamespace : 'false'
+#     AfterStruct : 'false'
+#     AfterUnion : 'false'
+#     BeforeCatch : 'false'
+#     BeforeElse : 'false'
+#     IndentBraces : 'false'
+# }
