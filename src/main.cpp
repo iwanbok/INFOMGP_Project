@@ -6,6 +6,7 @@
 
 #include <dirent.h>
 
+#include "macgrid.h"
 #include "scene.h"
 
 using namespace Eigen;
@@ -23,6 +24,7 @@ float timeStep = 0.02f;
 #endif // !ASSET_PATH
 string dataPath(ASSET_PATH);
 Scene scene;
+MaCGrid grid(0.2, 8.9e-4, 1);
 vector<string> sceneFiles;
 int sceneID = 0;
 
@@ -89,13 +91,18 @@ void initializeMeshes()
 	mgpViewer.data().clear();
 
 	// Viewer Settings
-	for (int i = 0; i < scene.meshes.size(); i++)
-	{
-		if (i != 0)
-			mgpViewer.append_mesh();
-		// mgpViewer.data_list[i].set_mesh(scene.meshes[i].currV, scene.meshes[i].F);
-	}
-	// mgpViewer.core.align_camera_center(scene.meshes[0].currV);
+	for (int i = 1; i < scene.meshes.size(); i++)
+		mgpViewer.append_mesh();
+}
+
+void initializeGrid()
+{
+	grid = MaCGrid(0.2, 8.9e-4, 1);
+	mgpViewer.append_mesh();
+	MatrixXd initialParticles(1000, 3);
+	for (int i = 0; i < initialParticles.rows(); i++)
+		initialParticles.row(i) << i * sin(i) / 10, 100, i * cos(i) / 10;
+	grid.addParticles(initialParticles);
 }
 
 void updateMeshes(igl::opengl::glfw::Viewer &viewer)
@@ -127,6 +134,8 @@ bool pre_draw(igl::opengl::glfw::Viewer &viewer)
 		currTime += timeStep;
 		// cout <<"currTime: "<<currTime<<endl;
 		updateMeshes(viewer);
+		grid.simulate(timeStep);
+		grid.displayFluid(viewer, scene.meshes.size());
 	}
 
 	return false;
@@ -246,6 +255,8 @@ int main(int argc, char **argv)
 	initializeScene();
 
 	initializeMeshes();
+
+	initializeGrid();
 
 	mgpViewer.callback_pre_draw = &pre_draw;
 	mgpViewer.callback_key_down = &key_down;
