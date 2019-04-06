@@ -1,4 +1,5 @@
 #pragma once
+/*Based on article https://pdfs.semanticscholar.org/9d47/1060d6c48308abcc98dbed850a39dbfea683.pdf */
 #include <PolyVox/RawVolume.h>
 #include <igl/opengl/glfw/Viewer.h>
 #include <unordered_map>
@@ -16,7 +17,7 @@ class MaCGrid;
 class GridCell
 {
   public:
-	Eigen::Vector3d coord;  // Coordinate in the world
+	Eigen::Vector3i coord;  // Coordinate in the world
 	double pressure;		// Pressure on centerpoint
 	Eigen::Vector3d u;		// Velocity on edges
 	Eigen::Vector3d u_temp; // Temporary storage needed in updates
@@ -24,11 +25,11 @@ class GridCell
 	int layer;				// layer to indicate fluid or distance to fluid
 	CellType type;			// Type of cell, either fluid, solid or air
 
-	GridCell() : grid(nullptr), type(AIR)
-	{
-	}
+	GridCell();
 
-	GridCell(const Eigen::Vector3d &_coord, MaCGrid *_grid, const int _layer, const CellType _type);
+	GridCell(const Eigen::Vector3i &_coord, MaCGrid *_grid, const int _layer, const CellType _type);
+
+	void convect(const double timestep);
 
 	bool operator==(const GridCell &other) const
 	{
@@ -68,6 +69,14 @@ class MaCGrid
 	// Display the marker particles as spheres
 	void displayFluid(igl::opengl::glfw::Viewer &viewer, const int offSet);
 
+	Eigen::Vector3d traceParticle(const Eigen::Vector3d &pos, double t);
+
+	Eigen::Vector3d traceParticle(double x, double y, double z, double t);
+
+	Eigen::Vector3d getVelocity(const Eigen::Vector3d &pos);
+
+	double getInterpolatedValue(double x, double y, double z, int index);
+
   private:
 	// TODO: Optional dynamic timestep
 
@@ -77,13 +86,13 @@ class MaCGrid
 	/********************************************
 	 *		Advance the velocity field u		*
 	 ********************************************/
-	void advanceField();
+	void advanceField(const double timestep);
 
 	// Backwards particle trace for convection
-	void applyConvection();
+	void applyConvection(const double timestep);
 
 	// Apply external forces(gravity)
-	void externalForces();
+	void externalForces(const double timestep);
 
 	// Apply viscosity
 	void applyViscosity();
@@ -103,7 +112,7 @@ class MaCGrid
 	/********************************************
 	 *		Advance the marker particles		*
 	 ********************************************/
-	void moveParticles();
+	void moveParticles(const double timestep);	
 };
 
 

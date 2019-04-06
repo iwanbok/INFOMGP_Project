@@ -98,8 +98,15 @@ void initializeMeshes()
 void initializeGrid()
 {
 	mgpViewer.append_mesh();
-	MatrixXd initialParticles(7, 3);
-	initialParticles << 0, 50, 0, 0, 51, 0, 0, 49, 0, 1, 50, 0, -1, 50, 0, 0, 50, 1, 0, 50, -1;
+	MatrixXd initialParticles(1000, 3);
+	int i = 0;
+	for (int x = -5; x < 5; x++)
+		for (int y = 45; y < 55; y++)
+			for (int z = -5; z < 5; z++)
+			{
+				initialParticles.row(i) << x, y, z;
+				i++;
+			}
 	grid.addParticles(initialParticles);
 }
 
