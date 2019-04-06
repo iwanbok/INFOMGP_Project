@@ -97,7 +97,6 @@ void initializeMeshes()
 
 void initializeGrid()
 {
-	grid = MaCGrid(0.2, 8.9e-4, 1);
 	mgpViewer.append_mesh();
 	MatrixXd initialParticles(1000, 3);
 	for (int i = 0; i < initialParticles.rows(); i++)

@@ -1,30 +1,46 @@
 #pragma once
+#include "PolyVox/RawVolume.h"
 #include <igl/opengl/glfw/Viewer.h>
 #include <unordered_map>
 #include <vector>
 
-template<>
-struct std::hash<Eigen::Vector3i>
-{
-	std::size_t operator()(const Eigen::Vector3i &coord) const
-	{
-		return 541 * coord.x() + 79 * coord.y() + 31 * coord.z();
-	}
-};
-
-class GridCell;
 enum CellType
 {
-	SOLID,
-	FLUID,
-	AIR
+	AIR = 0,
+	SOLID = 1,
+	FLUID = 2
+};
+
+class MaCGrid;
+
+class GridCell
+{
+  public:
+	Eigen::Vector3d coord;  // Coordinate in the world
+	double pressure;		// Pressure on centerpoint
+	Eigen::Vector3d u;		// Velocity on edges
+	Eigen::Vector3d u_temp; // Temporary storage needed in updates
+	MaCGrid *grid;			// Pointer to full grid
+	int layer;				// layer to indicate fluid or distance to fluid
+	CellType type;			// Type of cell, either fluid, solid or air
+
+	GridCell()
+	{
+	}
+
+	GridCell(const Eigen::Vector3d &_coord, MaCGrid *_grid, const int _layer, const CellType _type);
+
+	bool operator==(const GridCell &other) const
+	{
+		return coord == other.coord;
+	}
 };
 
 class MaCGrid
 {
 
   public:
-	std::unordered_map<Eigen::Vector3i, GridCell> dynamicGrid; // Dynamic grid to save memory.
+	PolyVox::RawVolume<GridCell> volData;
 	Eigen::MatrixXd
 		marker_particles; // #P by 3 matrix of marker particles used to keep track of fluid.
 
@@ -88,25 +104,4 @@ class MaCGrid
 	 *		Advance the marker particles		*
 	 ********************************************/
 	void moveParticles();
-};
-
-class GridCell
-{
-  public:
-	Eigen::Vector3d coord;  // Coordinate in the world
-	double pressure;		// Pressure on centerpoint
-	Eigen::Vector3d u;		// Velocity on edges
-	Eigen::Vector3d u_temp; // Temporary storage needed in updates
-	MaCGrid *grid;			// Pointer to full grid
-	int layer;				// layer to indicate fluid or distance to fluid
-	CellType type;			// Type of cell, either fluid, solid or air
-
-	GridCell(){}
-
-	GridCell(const Eigen::Vector3d &_coord, MaCGrid *_grid, const int _layer, const CellType _type);
-
-	bool operator==(const GridCell &other) const
-	{
-		return coord == other.coord;
-	}
 };
