@@ -1,5 +1,6 @@
 #include "macgrid.h"
 
+#include <Eigen/IterativeLinearSolvers>
 #include <PolyVox/MarchingCubesSurfaceExtractor.h>
 #include <PolyVox/Mesh.h>
 #include <cmath>
@@ -68,21 +69,29 @@ void MaCGrid::updateGrid()
 #pragma omp parallel for private(x) shared(z, y)
 			for (x = region.getLowerX(); x < region.getUpperX(); x++)
 			{
-				auto cell = volData.getVoxel(x, y, z);
+				auto &cell = volData.getVoxelRef(x, y, z);
 				if (cell.grid == nullptr)
 					continue;
 				cell.layer = -1;
 				if (cell.type != SOLID)
 					cell.type = AIR;
-				volData.setVoxel(x, y, z, cell);
 			}
+
+	fluidCells.clear();
 
 	for (int i = 0; i < marker_particles.rows(); i++)
 	{
 		RowVector3d loc = marker_particles.row(i);
 		RowVector3i coord;
 		igl::floor(loc, coord);
-		auto cell = volData.getVoxel(coord.x(), coord.y(), coord.z());
+
+		if (!volData.getEnclosingRegion().containsPoint(
+				Vector3DInt32(coord.x(), coord.y(), coord.z())))
+			continue;
+
+		auto &cell = volData.getVoxelRef(coord.x(), coord.y(), coord.z());
+		if (cell.type == FLUID)
+			continue;
 		if (cell.grid == nullptr)
 			cell = GridCell(coord, this, 0, FLUID);
 		else if (cell.type != SOLID)
@@ -92,119 +101,132 @@ void MaCGrid::updateGrid()
 		}
 		else
 			continue;
-		volData.setVoxel(coord.x(), coord.y(), coord.z(), cell);
+		cell.idx = fluidCells.size();
+		fluidCells.push_back(&cell);
 	}
-
-#pragma omp parallel for private(z)
-	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
-#pragma omp parallel for private(y) shared(z)
-		for (y = region.getLowerY(); y < region.getUpperY(); y++)
-#pragma omp parallel for private(x) shared(z, y)
-			for (x = region.getLowerX(); x < region.getUpperX(); x++)
-			{
-				auto cell = volData.getVoxel(x, y, z);
-				if (cell.grid == nullptr)
-					continue;
-				if (cell.type != SOLID && cell.type != FLUID)
-					volData.setVoxel(x, y, z, GridCell());
-			}
 }
 
 void MaCGrid::advanceField(const double timestep)
 {
 	applyConvection(timestep);
 	externalForces(timestep);
-	applyViscosity(timestep);
-	calcPressureField();
-	applyPressure();
+	// applyViscosity(timestep);
+	calcPressureField(timestep);
+	applyPressure(timestep);
 	extrapolate();
 	fixSolidCellVelocities();
 }
 
 void MaCGrid::applyConvection(const double timestep)
 {
-	Region region = volData.getEnclosingRegion();
-	for (int32_t z = region.getLowerZ(); z < region.getUpperZ(); z++)
-		for (int32_t y = region.getLowerY(); y < region.getUpperY(); y++)
-			for (int32_t x = region.getLowerX(); x < region.getUpperX(); x++)
-			{
-				auto voxel = volData.getVoxel(x, y, z);
-				if (voxel.type != FLUID)
-					continue;
-				voxel.convect(timestep);
-				volData.setVoxel(x, y, z, voxel);
-			}
-	int32_t z, y, x;
-#pragma omp parallel for private(z)
-	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
-#pragma omp parallel for private(y) shared(z)
-		for (y = region.getLowerY(); y < region.getUpperY(); y++)
-#pragma omp parallel for private(x) shared(z, y)
-			for (x = region.getLowerX(); x < region.getUpperX(); x++)
-			{
-				auto voxel = volData.getVoxel(x, y, z);
-				if (voxel.type != FLUID)
-					continue;
-				voxel.u = voxel.u_temp;
-				volData.setVoxel(x, y, z, voxel);
-			}
+#pragma omp parallel
+	for (auto cell : fluidCells)
+		cell->convect(timestep);
+
+#pragma omp parallel
+	for (auto cell : fluidCells)
+		cell->u = cell->u_temp;
 }
 
 void MaCGrid::externalForces(const double timestep)
 {
 	const Vector3d g(0, timestep * -9.81, 0);
-	const Region region = volData.getEnclosingRegion();
-	int32_t z, y, x;
-#pragma omp parallel for private(z)
-	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
-#pragma omp parallel for private(y) shared(z)
-		for (y = region.getLowerY(); y < region.getUpperY(); y++)
-#pragma omp parallel for private(x) shared(z, y)
-			for (x = region.getLowerX(); x < region.getUpperX(); x++)
-			{
-				auto voxel = volData.getVoxel(x, y, z);
-				if (voxel.type != FLUID)
-					continue;
-				voxel.u += g;
-				volData.setVoxel(x, y, z, voxel);
-			}
+
+#pragma omp parallel
+	for (auto cell : fluidCells)
+		cell->u += g;
 }
 
 void MaCGrid::applyViscosity(const double timestep)
 {
-	Region region = volData.getEnclosingRegion();
-	for (int32_t z = region.getLowerZ(); z < region.getUpperZ(); z++)
-		for (int32_t y = region.getLowerY(); y < region.getUpperY(); y++)
-			for (int32_t x = region.getLowerX(); x < region.getUpperX(); x++)
-			{
-				auto voxel = volData.getVoxel(x, y, z);
-				if (voxel.type != FLUID)
-					continue;
-				voxel.viscosity(timestep);
-				volData.setVoxel(x, y, z, voxel);
-			}
-	int32_t z, y, x;
-#pragma omp parallel for private(z)
-	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
-#pragma omp parallel for private(y) shared(z)
-		for (y = region.getLowerY(); y < region.getUpperY(); y++)
-#pragma omp parallel for private(x) shared(z, y)
-			for (x = region.getLowerX(); x < region.getUpperX(); x++)
-			{
-				auto voxel = volData.getVoxel(x, y, z);
-				if (voxel.type != FLUID)
-					continue;
-				voxel.u = voxel.u_temp;
-				volData.setVoxel(x, y, z, voxel);
-			}
+#pragma omp parallel
+	for (auto cell : fluidCells)
+		cell->viscosity(timestep);
+
+#pragma omp parallel
+	for (auto cell : fluidCells)
+		cell->u = cell->u_temp;
 }
 
-void MaCGrid::calcPressureField()
+void MaCGrid::calcPressureField(const double timestep)
 {
+	int size = fluidCells.size(); // TODO: fluidCells size
+	VectorXd p(size), b(size);
+	// Matrix<int, size, -1> A;
+	SparseMatrix<double> A(size, size);
+	ConjugateGradient<decltype(A), Lower | Upper> cg;
+
+	vector<Triplet<decltype(A)::Scalar>> triplets;
+	int i;
+#pragma omp parallel for
+	for (i = 0; i < size; i++)
+	{
+		auto &cell = *fluidCells[i];
+		int nonSolid = 0, k_air = 0;
+		double divergence = 0;
+
+		for (int j = 0; j < 3; ++j)
+		{
+			auto c = cell.coord;
+			c(j) += 1;
+			const auto &pos_v = volData.getVoxel(c.x(), c.y(), c.z());
+			auto pos_solid = pos_v.type == SOLID;
+			c(j) -= 2;
+			const auto &neg_v = volData.getVoxel(c.x(), c.y(), c.z());
+			auto neg_solid = neg_v.type == SOLID;
+
+			nonSolid -= !pos_solid + !neg_solid;
+
+			k_air += (pos_v.type == AIR) + (neg_v.type == AIR);
+
+#pragma omp critical
+			{
+				if (pos_v.type == FLUID)
+					triplets.emplace_back(i, pos_v.idx, 1);
+				if (neg_v.type == FLUID)
+					triplets.emplace_back(i, neg_v.idx, 1);
+			}
+
+			divergence += !pos_solid * pos_v.u(j) - !neg_solid * cell.u(j);
+		}
+
+#pragma omp critical
+		triplets.emplace_back(i, i, nonSolid);
+		// double divergence = (u_xp1 ? 0 : volData.getVoxel(x + 1, y, z).u(0) - u_xm1 ? 0 : u(0)) +
+		// 					(u_yp1 ? 0 : volData.getVoxel(x, y + 1, z).u(1) - u_ym1 ? 0 : u(1)) +
+		// 					(u_zp1 ? 0 : volData.getVoxel(x, y, z + 1).u(2) - u_zm1 ? 0 : u(2));
+		/* Modified divergence ∇·u(x,y,z) =
+		 * (ux(x+1,y,z)−ux(x,y,z)) +(uy(x,y+1,z)−uy(x,y,z))+(uz(x,y,z+1)−uz(x,y,z))*/
+
+		b(i) = density /* * cellWidth */ / timestep * divergence - k_air * p_atm;
+	}
+
+	A.setFromTriplets(triplets.begin(), triplets.end());
+
+	cg.compute(A);
+	p = cg.solve(b);
+
+#pragma omp parallel for
+	for (i = 0; i < size; i++)
+		fluidCells[i]->pressure = p(i);
 }
 
-void MaCGrid::applyPressure()
+void MaCGrid::applyPressure(const double timestep)
 {
+#pragma omp parallel
+	for (auto cell : fluidCells)
+	{
+		/*∇p(x,y,z) = (p(x,y,z)−p(x−1,y,z),p(x,y,z)−p(x,y−1,z),p(x,y,z)−p(x,y,z−1) )*/
+		Vector3d dp;
+		for (int j = 0; j < 3; ++j)
+		{
+			auto c = cell->coord;
+			c(j) -= 1;
+			dp(j) = cell->pressure - volData.getVoxel(c.x(), c.y(), c.z()).pressure;
+		}
+		cell->u -= timestep / density * dp;
+		// Vector3d(cell->p - volData.getVertex(cell->coord.x() + 1, cell.corrd));
+	}
 }
 
 void MaCGrid::extrapolate()
@@ -220,7 +242,6 @@ void MaCGrid::moveParticles(const double timestep)
 	// marker_particles.rowwise()
 	// marker_particles.rowwise().unaryExpr([](const Scalar &x)->Vector3d{return traceParticle(x,
 	// timestep);});//template cast<typename DerivedY::Scalar >();
-
 	int i;
 #pragma omp parallel for schedule(runtime) private(i)
 	for (i = 0; i < marker_particles.rows(); i++)
@@ -268,7 +289,7 @@ double MaCGrid::getInterpolatedValue(double x, double y, double z, int index)
 GridCell::GridCell() : grid(nullptr), type(AIR), layer(-1)
 {
 	pressure = 0;
-	coord.setZero();
+	coord.setConstant(INT32_MAX);
 	u.setZero();
 	u_temp.setZero();
 }

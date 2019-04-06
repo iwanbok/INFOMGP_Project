@@ -2,7 +2,6 @@
 /*Based on article https://pdfs.semanticscholar.org/9d47/1060d6c48308abcc98dbed850a39dbfea683.pdf */
 #include <PolyVox/RawVolume.h>
 #include <igl/opengl/glfw/Viewer.h>
-#include <unordered_map>
 #include <vector>
 
 enum CellType
@@ -24,6 +23,7 @@ class GridCell
 	MaCGrid *grid;			// Pointer to full grid
 	int layer;				// layer to indicate fluid or distance to fluid
 	CellType type;			// Type of cell, either fluid, solid or air
+	int idx;
 
 	GridCell();
 
@@ -44,6 +44,7 @@ class MaCGrid
 
   public:
 	PolyVox::RawVolume<GridCell> volData;
+	std::vector<GridCell *> fluidCells;
 	Eigen::MatrixXd
 		marker_particles; // #P by 3 matrix of marker particles used to keep track of fluid.
 
@@ -100,10 +101,10 @@ class MaCGrid
 	void applyViscosity(const double timestep);
 
 	// Calculate pressure field to satisfy incompressability
-	void calcPressureField();
+	void calcPressureField(const double timestep);
 
 	// Apply pressure term
-	void applyPressure();
+	void applyPressure(const double timestep);
 
 	// Extrapolate fluid into buffer zone
 	void extrapolate();
@@ -114,10 +115,8 @@ class MaCGrid
 	/********************************************
 	 *		Advance the marker particles		*
 	 ********************************************/
-	void moveParticles(const double timestep);	
+	void moveParticles(const double timestep);
 };
-
-
 
 class CustomController
 {
