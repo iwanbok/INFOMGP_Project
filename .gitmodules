@@ -1,3 +1,6 @@
 [submodule "libigl"]
 	path = libigl
 	url = https://github.com/libigl/libigl.git
+[submodule "libpolyvox"]
+	path = libpolyvox
+	url = https://bitbucket.org/volumesoffun/polyvox.git
