@@ -14,6 +14,7 @@ MaCGrid::MaCGrid(const double _h, const double _viscocity, const double _density
 	: h(_h), viscocity(_viscocity), density(_density), marker_particles(0, 3),
 	  volData(Region(Vector3DInt32(-100, 0, -100), Vector3DInt32(100, 100, 100)))
 {
+	volData.setBorderValue(GridCell(Vector3i::Zero(), this, -1, SOLID));
 }
 
 void MaCGrid::addParticles(const Eigen::MatrixXd &positions)
@@ -85,15 +86,28 @@ void MaCGrid::updateGrid()
 			cell.layer = 0;
 			cell.type = FLUID;
 		}
+		else
+			continue;
 		volData.setVoxel(coord.x(), coord.y(), coord.z(), cell);
 	}
+
+	for (int z = region.getLowerZ(); z < region.getUpperZ(); z++)
+		for (int y = region.getLowerY(); y < region.getUpperY(); y++)
+			for (int x = region.getLowerX(); x < region.getUpperX(); x++)
+			{
+				auto cell = volData.getVoxel(x, y, z);
+				if (cell.grid == nullptr)
+					continue;
+				if (cell.type != SOLID && cell.type != FLUID)
+					volData.setVoxel(x, y, z, GridCell());
+			}
 }
 
 void MaCGrid::advanceField(const double timestep)
 {
 	applyConvection(timestep);
 	externalForces(timestep);
-	applyViscosity();
+	applyViscosity(timestep);
 	calcPressureField();
 	applyPressure();
 	extrapolate();
@@ -141,8 +155,29 @@ void MaCGrid::externalForces(const double timestep)
 			}
 }
 
-void MaCGrid::applyViscosity()
+void MaCGrid::applyViscosity(const double timestep)
 {
+	Region region = volData.getEnclosingRegion();
+	for (int32_t z = region.getLowerZ(); z < region.getUpperZ(); z++)
+		for (int32_t y = region.getLowerY(); y < region.getUpperY(); y++)
+			for (int32_t x = region.getLowerX(); x < region.getUpperX(); x++)
+			{
+				auto voxel = volData.getVoxel(x, y, z);
+				if (voxel.type != FLUID)
+					continue;
+				voxel.viscosity(timestep);
+				volData.setVoxel(x, y, z, voxel);
+			}
+	for (int32_t z = region.getLowerZ(); z < region.getUpperZ(); z++)
+		for (int32_t y = region.getLowerY(); y < region.getUpperY(); y++)
+			for (int32_t x = region.getLowerX(); x < region.getUpperX(); x++)
+			{
+				auto voxel = volData.getVoxel(x, y, z);
+				if (voxel.type != FLUID)
+					continue;
+				voxel.u = voxel.u_temp;
+				volData.setVoxel(x, y, z, voxel);
+			}
 }
 
 void MaCGrid::calcPressureField()
@@ -164,9 +199,11 @@ void MaCGrid::fixSolidCellVelocities()
 void MaCGrid::moveParticles(const double timestep)
 {
 	// marker_particles.rowwise()
-	// marker_particles.rowwise().unaryExpr([](const Scalar &x)->Vector3d{return traceParticle(x, timestep);});//template cast<typename DerivedY::Scalar >();
-	for(int i = 0; i < marker_particles.rows(); i++)
-		marker_particles.row(i) << traceParticle(marker_particles.row(i).transpose(), timestep).transpose();
+	// marker_particles.rowwise().unaryExpr([](const Scalar &x)->Vector3d{return traceParticle(x,
+	// timestep);});//template cast<typename DerivedY::Scalar >();
+	for (int i = 0; i < marker_particles.rows(); i++)
+		marker_particles.row(i)
+			<< traceParticle(marker_particles.row(i).transpose(), timestep).transpose();
 }
 
 Vector3d MaCGrid::traceParticle(double x, double y, double z, double t)
@@ -231,6 +268,20 @@ void GridCell::convect(const double timestep)
 	u_temp << grid->getInterpolatedValue(u_x.x(), u_x.y() - 0.5, u_x.z() - 0.5, 0),
 		grid->getInterpolatedValue(u_y.x() - 0.5, u_y.y(), u_y.z() - 0.5, 1),
 		grid->getInterpolatedValue(u_z.x() - 0.5, u_z.y() - 0.5, u_z.z(), 2);
+}
+
+void GridCell::viscosity(const double timestep)
+{
+	int32_t x = coord.x();
+	int32_t y = coord.y();
+	int32_t z = coord.z();
+	// TODO: only components bordering fluid are allowed to participate
+	Vector3d laplacian =
+		grid->volData.getVoxel(x + 1, y, z).u + grid->volData.getVoxel(x - 1, y, z).u +
+		grid->volData.getVoxel(x, y + 1, z).u + grid->volData.getVoxel(x, y - 1, z).u +
+		grid->volData.getVoxel(x, y, z + 1).u + grid->volData.getVoxel(x, y, z - 1).u -
+		6 * grid->volData.getVoxel(x, y, z).u;
+	u_temp = u + timestep * grid->viscocity * laplacian;
 }
 
 /* PSEUDOCODE

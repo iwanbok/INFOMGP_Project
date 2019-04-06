@@ -31,6 +31,8 @@ class GridCell
 
 	void convect(const double timestep);
 
+	void viscosity(const double timestep);
+
 	bool operator==(const GridCell &other) const
 	{
 		return coord == other.coord;
@@ -95,7 +97,7 @@ class MaCGrid
 	void externalForces(const double timestep);
 
 	// Apply viscosity
-	void applyViscosity();
+	void applyViscosity(const double timestep);
 
 	// Calculate pressure field to satisfy incompressability
 	void calcPressureField();
