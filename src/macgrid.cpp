@@ -60,9 +60,13 @@ void MaCGrid::updateGrid()
 {
 	Region region = volData.getEnclosingRegion();
 	// This three-level for loop iterates over every voxel in the volume
-	for (int z = region.getLowerZ(); z < region.getUpperZ(); z++)
-		for (int y = region.getLowerY(); y < region.getUpperY(); y++)
-			for (int x = region.getLowerX(); x < region.getUpperX(); x++)
+	int32_t z, y, x;
+#pragma omp parallel for private(z)
+	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+		for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+			for (x = region.getLowerX(); x < region.getUpperX(); x++)
 			{
 				auto cell = volData.getVoxel(x, y, z);
 				if (cell.grid == nullptr)
@@ -91,9 +95,12 @@ void MaCGrid::updateGrid()
 		volData.setVoxel(coord.x(), coord.y(), coord.z(), cell);
 	}
 
-	for (int z = region.getLowerZ(); z < region.getUpperZ(); z++)
-		for (int y = region.getLowerY(); y < region.getUpperY(); y++)
-			for (int x = region.getLowerX(); x < region.getUpperX(); x++)
+#pragma omp parallel for private(z)
+	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+		for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+			for (x = region.getLowerX(); x < region.getUpperX(); x++)
 			{
 				auto cell = volData.getVoxel(x, y, z);
 				if (cell.grid == nullptr)
@@ -127,9 +134,13 @@ void MaCGrid::applyConvection(const double timestep)
 				voxel.convect(timestep);
 				volData.setVoxel(x, y, z, voxel);
 			}
-	for (int32_t z = region.getLowerZ(); z < region.getUpperZ(); z++)
-		for (int32_t y = region.getLowerY(); y < region.getUpperY(); y++)
-			for (int32_t x = region.getLowerX(); x < region.getUpperX(); x++)
+	int32_t z, y, x;
+#pragma omp parallel for private(z)
+	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+		for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+			for (x = region.getLowerX(); x < region.getUpperX(); x++)
 			{
 				auto voxel = volData.getVoxel(x, y, z);
 				if (voxel.type != FLUID)
@@ -143,9 +154,13 @@ void MaCGrid::externalForces(const double timestep)
 {
 	const Vector3d g(0, timestep * -9.81, 0);
 	const Region region = volData.getEnclosingRegion();
-	for (int32_t z = region.getLowerZ(); z < region.getUpperZ(); z++)
-		for (int32_t y = region.getLowerY(); y < region.getUpperY(); y++)
-			for (int32_t x = region.getLowerX(); x < region.getUpperX(); x++)
+	int32_t z, y, x;
+#pragma omp parallel for private(z)
+	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+		for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+			for (x = region.getLowerX(); x < region.getUpperX(); x++)
 			{
 				auto voxel = volData.getVoxel(x, y, z);
 				if (voxel.type != FLUID)
@@ -168,9 +183,13 @@ void MaCGrid::applyViscosity(const double timestep)
 				voxel.viscosity(timestep);
 				volData.setVoxel(x, y, z, voxel);
 			}
-	for (int32_t z = region.getLowerZ(); z < region.getUpperZ(); z++)
-		for (int32_t y = region.getLowerY(); y < region.getUpperY(); y++)
-			for (int32_t x = region.getLowerX(); x < region.getUpperX(); x++)
+	int32_t z, y, x;
+#pragma omp parallel for private(z)
+	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+		for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+			for (x = region.getLowerX(); x < region.getUpperX(); x++)
 			{
 				auto voxel = volData.getVoxel(x, y, z);
 				if (voxel.type != FLUID)
@@ -201,7 +220,10 @@ void MaCGrid::moveParticles(const double timestep)
 	// marker_particles.rowwise()
 	// marker_particles.rowwise().unaryExpr([](const Scalar &x)->Vector3d{return traceParticle(x,
 	// timestep);});//template cast<typename DerivedY::Scalar >();
-	for (int i = 0; i < marker_particles.rows(); i++)
+
+	int i;
+#pragma omp parallel for schedule(runtime) private(i)
+	for (i = 0; i < marker_particles.rows(); i++)
 		marker_particles.row(i)
 			<< traceParticle(marker_particles.row(i).transpose(), timestep).transpose();
 }
