@@ -167,6 +167,8 @@ bool key_down(igl::opengl::glfw::Viewer &viewer, unsigned char key, int modifier
 			currTime += timeStep;
 			updateMeshes(viewer);
 			std::cout << "currTime: " << currTime << std::endl;
+			grid.simulate(timeStep);
+			grid.displayFluid(viewer, scene.meshes.size());
 			return true;
 		}
 	}
@@ -269,6 +271,7 @@ int main(int argc, char **argv)
 	mgpViewer.core.is_animating = false;
 	mgpViewer.core.animation_max_fps = 50.;
 	updateMeshes(mgpViewer);
+	grid.displayFluid(mgpViewer, scene.meshes.size());
 	CustomMenu menu;
 	mgpViewer.plugins.push_back(&menu);
 

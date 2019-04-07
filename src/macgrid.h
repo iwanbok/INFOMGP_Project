@@ -2,6 +2,7 @@
 /*Based on article https://pdfs.semanticscholar.org/9d47/1060d6c48308abcc98dbed850a39dbfea683.pdf */
 #include <PolyVox/RawVolume.h>
 #include <igl/opengl/glfw/Viewer.h>
+#include <set>
 #include <vector>
 
 enum CellType
@@ -17,21 +18,20 @@ class GridCell
 {
   public:
 	Eigen::Vector3i coord;  // Coordinate in the world
-	double pressure;		// Pressure on centerpoint
 	Eigen::Vector3d u;		// Velocity on edges
 	Eigen::Vector3d u_temp; // Temporary storage needed in updates
-	MaCGrid *grid;			// Pointer to full grid
+	Eigen::Vector3d mask;   // mask for velocity component updates
 	int layer;				// layer to indicate fluid or distance to fluid
 	CellType type;			// Type of cell, either fluid, solid or air
 	int idx;
 
 	GridCell();
 
-	GridCell(const Eigen::Vector3i &_coord, MaCGrid *_grid, const int _layer, const CellType _type);
+	GridCell(const Eigen::Vector3i &_coord, const int _layer, const CellType _type);
 
-	void convect(const double timestep);
+	void convect(const MaCGrid &grid, const double timestep);
 
-	void viscosity(const double timestep);
+	void viscosity(const MaCGrid &grid, const double timestep);
 
 	bool operator==(const GridCell &other) const
 	{
@@ -44,7 +44,8 @@ class MaCGrid
 
   public:
 	PolyVox::RawVolume<GridCell> volData;
-	std::vector<GridCell *> fluidCells;
+	std::set<GridCell *> fluidCells;
+	std::set<GridCell *> borderCells;
 	Eigen::MatrixXd
 		marker_particles; // #P by 3 matrix of marker particles used to keep track of fluid.
 
@@ -60,25 +61,21 @@ class MaCGrid
 	// Add marker particles in radius
 	void addParticles(const Eigen::MatrixXd &positions);
 
-	// Get cell coordinates
-	Eigen::RowVector3i getCellCoordinate(Eigen::RowVector3d worldCoordinate)
-	{
-		return (worldCoordinate / h - Eigen::RowVector3d::Constant(0.5)).cast<int>();
-	}
-
 	// Simulate the fluid for the specified timestep
 	void simulate(const double timestep);
 
 	// Display the marker particles as spheres
+	// (Could be a const method, except that extractMarchingCubesMesh
+	//  takes volData as non-const pointer).
 	void displayFluid(igl::opengl::glfw::Viewer &viewer, const int offSet);
 
-	Eigen::Vector3d traceParticle(const Eigen::Vector3d &pos, double t);
+	Eigen::Vector3d traceParticle(const Eigen::Vector3d &pos, double t) const;
 
-	Eigen::Vector3d traceParticle(double x, double y, double z, double t);
+	Eigen::Vector3d traceParticle(double x, double y, double z, double t) const;
 
-	Eigen::Vector3d getVelocity(const Eigen::Vector3d &pos);
+	Eigen::Vector3d getVelocity(const Eigen::Vector3d &pos) const;
 
-	double getInterpolatedValue(double x, double y, double z, int index);
+	double getInterpolatedValue(double x, double y, double z, int index) const;
 
   private:
 	// TODO: Optional dynamic timestep
@@ -94,7 +91,7 @@ class MaCGrid
 	// Backwards particle trace for convection
 	void applyConvection(const double timestep);
 
-	// Apply external forces(gravity)
+	// Apply external forces (gravity)
 	void externalForces(const double timestep);
 
 	// Apply viscosity
@@ -102,9 +99,6 @@ class MaCGrid
 
 	// Calculate pressure field to satisfy incompressability
 	void calcPressureField(const double timestep);
-
-	// Apply pressure term
-	void applyPressure(const double timestep);
 
 	// Extrapolate fluid into buffer zone
 	void extrapolate();
