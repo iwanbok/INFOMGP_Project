@@ -93,6 +93,10 @@ void initializeMeshes()
 	// Viewer Settings
 	for (int i = 1; i < scene.meshes.size(); i++)
 		mgpViewer.append_mesh();
+
+	// Append one more mesh for the fluid, which
+	// will be placed at i = scene.meshes.size()
+	mgpViewer.append_mesh();
 }
 
 void initializeGrid()
