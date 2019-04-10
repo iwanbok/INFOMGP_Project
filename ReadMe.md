@@ -41,3 +41,6 @@ The simulation supports launching with scenes containing meshes, it has as of ye
 ## Screenshots
 #### Representative screenshot
 ![Representative screenshot](screenshots/representativescreenshot.png "Representative screenshot")
+
+#### cg solver screenshot
+![Representative screenshot](screenshots/cgsolver.png "cg solver screenshot")
