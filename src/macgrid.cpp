@@ -83,15 +83,15 @@ igl::opengl::ViewerData &MaCGrid::displayVoxelMesh(igl::opengl::glfw::Viewer &vi
 
 	// Extract matrices for igl
 	MatrixXd V(decoded.getNoOfVertices(), 3);
-	MatrixXd colors(decoded.getNoOfVertices(), 3);
+	// MatrixXd colors(decoded.getNoOfVertices(), 3);
 	MatrixXi T(decoded.getNoOfIndices() / 3, 3);
 	for (int i = 0; i < V.rows(); i++)
 	{
 		auto vertex = decoded.getVertex(i).position +
 					  (Vector3DFloat)volData.getEnclosingRegion().getLowerCorner();
 		V.row(i) << vertex.getX(), vertex.getY(), vertex.getZ();
-		colors.row(i) << V.row(i) / 2.0;
-		colors.row(i).y() /= 10.0;
+		// colors.row(i) << V.row(i) / 2.0;
+		// colors.row(i).y() /= 10.0;
 	}
 	for (int i = 0; i < decoded.getNoOfIndices(); i++)
 		T(i / 3, i % 3) = (int)decoded.getIndex(i);
@@ -101,7 +101,7 @@ igl::opengl::ViewerData &MaCGrid::displayVoxelMesh(igl::opengl::glfw::Viewer &vi
 	viewData.clear();
 	viewData.set_mesh(V, T);
 	viewData.set_face_based(true);
-	viewData.set_colors(colors);
+	// viewData.set_colors(colors);
 	viewData.show_lines = false;
 	return viewData;
 }
@@ -110,6 +110,7 @@ void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
 {
 	// Fluid mesh
 	auto &fluidViewer = displayVoxelMesh(viewer, offset, FLUID);
+	fluidViewer.set_colors(RowVector3d{0, 0, 1});
 
 	// Solid mesh
 	auto &solidViewer = displayVoxelMesh(viewer, offset + 1, SOLID);
