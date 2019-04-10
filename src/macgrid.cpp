@@ -259,7 +259,7 @@ void MaCGrid::calcPressureField(const double timestep)
 					triplets.emplace_back(cell->idx, neg_v.idx, 1);
 			}
 
-			divergence += pos_v.u(j) - cell->mask.cwiseProduct(cell->u)(j);
+			divergence += pos_v.u(j) - neg_v.u(j); // cell->mask.cwiseProduct(cell->u)(j);
 		}
 
 #pragma omp critical
@@ -271,7 +271,7 @@ void MaCGrid::calcPressureField(const double timestep)
 		 * (ux(x+1,y,z)−ux(x,y,z)) +(uy(x,y+1,z)−uy(x,y,z))+(uz(x,y,z+1)−uz(x,y,z))*/
 
 		// TODO: Account for atmospheric pressure as soon as we have a proper density!
-		b(cell->idx) = density * divergence / timestep - k_air; // * p_atm / 1000.0;
+		b(cell->idx) = density * divergence / timestep - k_air;
 	}
 
 	A.setFromTriplets(triplets.begin(), triplets.end());
@@ -295,7 +295,15 @@ void MaCGrid::calcPressureField(const double timestep)
 				neigh_pressure = 1;
 			else if (neigh.idx >= 0)
 				neigh_pressure = p(neigh.idx);
-			dp(j) = p(cell->idx) - neigh_pressure;
+			c(j) -= 2;
+			const auto &other = volData.getVoxel(c.x(), c.y(), c.z());
+			double other_pressure = 0;
+			if (other.type == AIR)
+				// atmospheric pressure at density 1
+				other_pressure = 1;
+			else if (other.idx >= 0)
+				other_pressure = p(neigh.idx);
+			dp(j) = neigh_pressure - other_pressure;
 		}
 		cell->u -= timestep / density * dp;
 	}
@@ -315,7 +323,15 @@ void MaCGrid::calcPressureField(const double timestep)
 				neigh_pressure = 1;
 			else if (neigh.idx >= 0)
 				neigh_pressure = p(neigh.idx);
-			dp(j) = p(cell->idx) - neigh_pressure;
+			c(j) -= 2;
+			const auto &other = volData.getVoxel(c.x(), c.y(), c.z());
+			double other_pressure = 0;
+			if (other.type == AIR)
+				// atmospheric pressure at density 1
+				other_pressure = 1;
+			else if (other.idx >= 0)
+				other_pressure = p(neigh.idx);
+			dp(j) = neigh_pressure - other_pressure;
 		}
 		cell->u -= cell->mask.cwiseProduct(timestep / density * dp);
 	}
