@@ -53,7 +53,8 @@ class MaCGrid
 	double density;   // Density of the fluid
 
 	double air_density = 1; // Air density(always 1)
-	double p_atm = 101325;  // ~100 kPa air pressure
+	double p_atm = 1;
+	// 101325;  // ~100 kPa air pressure
 
 	double h; // Width of a gridcell
 	MaCGrid(const double _h, const double _viscocity, const double _density);

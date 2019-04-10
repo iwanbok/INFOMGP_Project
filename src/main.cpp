@@ -24,7 +24,7 @@ float timeStep = 0.2f;
 #endif // !ASSET_PATH
 string dataPath(ASSET_PATH);
 Scene scene;
-MaCGrid grid(0.2, 8.9e-4, 1);
+MaCGrid grid(1 /* 0.2 */, 8.9e-4, 1);
 vector<string> sceneFiles;
 int sceneID = 0;
 

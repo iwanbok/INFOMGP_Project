@@ -384,7 +384,7 @@ void MaCGrid::calcPressureField(const double timestep)
 		 * (ux(x+1,y,z)−ux(x,y,z)) +(uy(x,y+1,z)−uy(x,y,z))+(uz(x,y,z+1)−uz(x,y,z)) */
 
 		// TODO: Account for atmospheric pressure as soon as we have a proper density!
-		b(cell->idx) = density * divergence / timestep - k_air;
+		b(cell->idx) = density * divergence / timestep - k_air * p_atm;
 	}
 
 	A.setFromTriplets(triplets.begin(), triplets.end());
@@ -405,15 +405,15 @@ void MaCGrid::calcPressureField(const double timestep)
 			double neigh_pressure = 0;
 			if (neigh.type == AIR)
 				// atmospheric pressure at density 1
-				neigh_pressure = 1;
+				neigh_pressure = p_atm;
 			else if (neigh.idx >= 0)
 				neigh_pressure = p(neigh.idx);
-			c(j) -= 2;
+			c(j) += 2;
 			const auto &other = volData.getVoxel(c.x(), c.y(), c.z());
 			double other_pressure = 0;
 			if (other.type == AIR)
 				// atmospheric pressure at density 1
-				other_pressure = 1;
+				other_pressure = p_atm;
 			else if (other.idx >= 0)
 				other_pressure = p(neigh.idx);
 			dp(j) = neigh_pressure - other_pressure;
@@ -433,15 +433,15 @@ void MaCGrid::calcPressureField(const double timestep)
 			double neigh_pressure = 0;
 			if (neigh.type == AIR)
 				// atmospheric pressure at density 1
-				neigh_pressure = 1;
+				neigh_pressure = p_atm;
 			else if (neigh.idx >= 0)
 				neigh_pressure = p(neigh.idx);
-			c(j) -= 2;
+			c(j) += 2;
 			const auto &other = volData.getVoxel(c.x(), c.y(), c.z());
 			double other_pressure = 0;
 			if (other.type == AIR)
 				// atmospheric pressure at density 1
-				other_pressure = 1;
+				other_pressure = p_atm;
 			else if (other.idx >= 0)
 				other_pressure = p(neigh.idx);
 			dp(j) = neigh_pressure - other_pressure;
@@ -521,9 +521,18 @@ void MaCGrid::fixSolidCellVelocities()
 				{
 					auto coord = cell.coord;
 					coord(c) -= 1;
-					auto &neigh = volData.getVoxel(coord.x(), coord.y(), coord.z());
-					if (neigh.type == SOLID && cell.u(c) < 0)
-						cell.u(c) = 0;
+					{
+						auto &neigh = volData.getVoxel(coord.x(), coord.y(), coord.z());
+						if (neigh.type == SOLID && cell.u(c) < 0)
+							cell.u(c) = 0;
+					}
+
+					coord(c) += 2;
+					{
+						auto &neigh = volData.getVoxel(coord.x(), coord.y(), coord.z());
+						if (neigh.type == SOLID && cell.u(c) > 0)
+							cell.u(c) = 0;
+					}
 				}
 			}
 }
@@ -631,6 +640,7 @@ GridCell::GridCell() : type(AIR), layer(-1), idx(-1)
 	coord.setConstant(INT32_MAX);
 	u.setZero();
 	u_temp.setZero();
+	mask.setZero();
 }
 
 GridCell::GridCell(const Eigen::Vector3i &_coord, const int _layer, const CellType _type)
@@ -638,6 +648,7 @@ GridCell::GridCell(const Eigen::Vector3i &_coord, const int _layer, const CellTy
 {
 	u.setZero();
 	u_temp.setZero();
+	mask.setZero();
 }
 
 void GridCell::convect(const MaCGrid &grid, const double timestep)
