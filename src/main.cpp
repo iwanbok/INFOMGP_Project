@@ -102,6 +102,7 @@ void initializeMeshes()
 
 void initializeGrid()
 {
+	grid.reset();
 	mgpViewer.append_mesh();
 	MatrixXd initialParticles(1000000, 3);
 	int i = 0;
@@ -192,6 +193,7 @@ bool key_down(igl::opengl::glfw::Viewer &viewer, unsigned char key, int modifier
 		initializeScene();
 		initializeMeshes();
 		updateMeshes(mgpViewer);
+		initializeGrid();
 		return true;
 	}
 
@@ -202,6 +204,7 @@ bool key_down(igl::opengl::glfw::Viewer &viewer, unsigned char key, int modifier
 		initializeScene();
 		initializeMeshes();
 		updateMeshes(mgpViewer);
+		initializeGrid();
 		return true;
 	}
 

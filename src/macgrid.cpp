@@ -6,6 +6,7 @@
 #include <cmath>
 #include <functional>
 #include <igl/floor.h>
+#include <igl/marching_tets.h>
 #include <iostream>
 
 using namespace PolyVox;
@@ -17,7 +18,6 @@ MaCGrid::MaCGrid(const double _h, const double _viscocity, const double _density
 	  volData(Region(Vector3DInt32(-100, 0, -100), Vector3DInt32(100, 100, 100)))
 {
 	volData.setBorderValue(GridCell(Vector3i::Zero(), -1, SOLID));
-
 	Region region = volData.getEnclosingRegion();
 	int32_t z, y, x;
 #pragma omp parallel for private(z)
@@ -33,6 +33,29 @@ MaCGrid::MaCGrid(const double _h, const double _viscocity, const double _density
 				// Make an (invisible) solid floor
 				if (x * x + y * y + z * z < 100)
 					cell.type = SOLID;
+			}
+}
+
+void MaCGrid::reset()
+{
+	marker_particles.resize(0, 3);
+	fluidCells.clear();
+	borderCells.clear();
+	Region region = volData.getEnclosingRegion();
+	int32_t z, y, x;
+#pragma omp parallel for private(z)
+	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+		for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+			for (x = region.getLowerX(); x < region.getUpperX(); x++)
+			{
+				auto &cell = volData.getVoxelRef(x, y, z);
+				// Make an (invisible) solid floor
+				if (x * x + y * y + z * z < 100)
+					cell.type = SOLID;
+				else
+					cell = GridCell(cell.coord, -1, AIR);
 			}
 }
 
@@ -508,8 +531,8 @@ void MaCGrid::fixSolidCellVelocities()
 void MaCGrid::moveParticles(const double timestep)
 {
 	// marker_particles.rowwise()
-	// marker_particles.rowwise().unaryExpr([](const Scalar &x)->Vector3d{return traceParticle(x,
-	// timestep);});//template cast<typename DerivedY::Scalar >();
+	// marker_particles.rowwise().unaryExpr([](const Scalar &x)->Vector3d{return
+	// traceParticle(x, timestep);});//template cast<typename DerivedY::Scalar >();
 	int i;
 #pragma omp parallel for schedule(runtime) private(i)
 	for (i = 0; i < marker_particles.rows(); i++)

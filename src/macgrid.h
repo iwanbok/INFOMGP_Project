@@ -58,6 +58,8 @@ class MaCGrid
 	double h; // Width of a gridcell
 	MaCGrid(const double _h, const double _viscocity, const double _density);
 
+	void reset();
+
 	// Add marker particles in radius
 	void addParticles(const Eigen::MatrixXd &positions);
 
