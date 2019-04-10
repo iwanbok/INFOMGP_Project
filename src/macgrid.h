@@ -23,14 +23,16 @@ class GridCell
 	Eigen::Vector3d mask;   // mask for velocity component updates
 	int layer;				// layer to indicate fluid or distance to fluid
 	CellType type;			// Type of cell, either fluid, solid or air
-	int idx;
-	double p, p2, div;
+	int idx;				// Id associated with fluid cells
+	double p, p2, div;		// Values needed for pressure calculation
 	GridCell();
 
 	GridCell(const Eigen::Vector3i &_coord, const int _layer, const CellType _type);
 
+	// Use advection to determine the new velocity components
 	void convect(const MaCGrid &grid, const double timestep);
 
+	// NOT USED update the velocity using viscosity
 	void viscosity(const MaCGrid &grid, const double timestep);
 
 	bool operator==(const GridCell &other) const
@@ -43,9 +45,10 @@ class MaCGrid
 {
 
   public:
-	PolyVox::RawVolume<GridCell> volData;
-	std::set<GridCell *> fluidCells;
-	std::set<GridCell *> borderCells;
+	PolyVox::RawVolume<GridCell> volData; // Voxel volume of the grid
+	std::set<GridCell *> fluidCells;	  // Set of cells which are marked fluid
+	std::set<GridCell *>
+		borderCells; // Set of cells which contain velocity components bordering fluid
 	Eigen::MatrixXd
 		marker_particles; // #P by 3 matrix of marker particles used to keep track of fluid.
 
@@ -56,9 +59,11 @@ class MaCGrid
 	double p_atm = 1;
 	// 101325;  // ~100 kPa air pressure
 
-	double h; // Width of a gridcell
+	double h; // Width of a gridcell(Not used)
 	MaCGrid(const double _h, const double _viscocity, const double _density);
 
+	// Reset the grid to a clean state, use this instead of calling the constructor again as the =
+	// operator is deleted.
 	void reset();
 
 	// Add marker particles in radius
@@ -76,12 +81,16 @@ class MaCGrid
 	//  takes volData as non-const pointer).
 	void displayFluid(igl::opengl::glfw::Viewer &viewer, const int offSet);
 
+	// Trace a particle at position pos for t time
 	Eigen::Vector3d traceParticle(const Eigen::Vector3d &pos, double t) const;
 
+	// Trace a particle from x, y, z position for t time
 	Eigen::Vector3d traceParticle(double x, double y, double z, double t) const;
 
+	// Gets the interpolated velocity of the given pos
 	Eigen::Vector3d getVelocity(const Eigen::Vector3d &pos) const;
 
+	// Get a intepolated value at x, y, z position at index of u vector in gridcells
 	double getInterpolatedValue(double x, double y, double z, int index) const;
 
   private:
@@ -134,11 +143,8 @@ class CustomController
 	/**
 	 * Constructor
 	 *
-	 * This version of the constructor takes no parameters and sets the threshold to the middle of
-	 * the representable range of the underlying type. For example, if the voxel type is 'uint8_t'
-	 * then the representable range is 0-255, and the threshold will be set to 127. On the other
-	 * hand, if the voxel type is 'float' then the representable range is -FLT_MAX to FLT_MAX and
-	 * the threshold will be set to zero.
+	 * This version of the constructor sets the controller to which type it should accept when
+	 * making the mesh.
 	 */
 	CustomController(CellType filter)
 	{
@@ -148,9 +154,6 @@ class CustomController
 
 	/**
 	 * Converts the underlying voxel type into a density value.
-	 *
-	 * The default implementation of this function just returns the voxel type directly and is
-	 * suitable for primitives types. Specialisations of this class can modify this behaviour.
 	 */
 	DensityType convertToDensity(GridCell voxel)
 	{
@@ -159,11 +162,6 @@ class CustomController
 
 	/**
 	 * Converts the underlying voxel type into a material value.
-	 *
-	 * The default implementation of this function just returns the constant '1'. There's not much
-	 * else it can do, as it needs to work with primitive types and the actual value of the type is
-	 * already being considered to be the density. Specialisations of this class can modify this
-	 * behaviour.
 	 */
 	MaterialType convertToMaterial(GridCell voxel)
 	{

@@ -76,9 +76,12 @@ void MaCGrid::simulate(const double timestep)
 igl::opengl::ViewerData &MaCGrid::displayVoxelMesh(igl::opengl::glfw::Viewer &viewer,
 												   const int offset, CellType voxelType)
 {
+	// Extract mesh from voxel volume
 	CustomController controller(voxelType);
 	auto mesh = extractMarchingCubesMesh(&volData, volData.getEnclosingRegion(), controller);
 	auto decoded = decodeMesh(mesh);
+
+	// Extract matrices for igl
 	MatrixXd V(decoded.getNoOfVertices(), 3);
 	MatrixXd colors(decoded.getNoOfVertices(), 3);
 	MatrixXi T(decoded.getNoOfIndices() / 3, 3);
@@ -93,6 +96,7 @@ igl::opengl::ViewerData &MaCGrid::displayVoxelMesh(igl::opengl::glfw::Viewer &vi
 	for (int i = 0; i < decoded.getNoOfIndices(); i++)
 		T(i / 3, i % 3) = (int)decoded.getIndex(i);
 
+	// Set mesh data in viewer
 	auto &viewData = viewer.data_list[offset];
 	viewData.clear();
 	viewData.set_mesh(V, T);
@@ -104,8 +108,10 @@ igl::opengl::ViewerData &MaCGrid::displayVoxelMesh(igl::opengl::glfw::Viewer &vi
 
 void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
 {
+	// Fluid mesh
 	auto &fluidViewer = displayVoxelMesh(viewer, offset, FLUID);
 
+	// Solid mesh
 	auto &solidViewer = displayVoxelMesh(viewer, offset + 1, SOLID);
 	solidViewer.set_colors(RowVector3d{1, 0, 0});
 }
@@ -132,8 +138,8 @@ void MaCGrid::updateGrid()
 					cell.type = AIR;
 			}
 
+	// Fill the fluid cells list where there is fluid
 	fluidCells.clear();
-
 	for (int i = 0; i < marker_particles.rows(); i++)
 	{
 		RowVector3d loc = marker_particles.row(i);
@@ -164,8 +170,8 @@ void MaCGrid::updateGrid()
 		}
 	}
 
+	// Fill the border cell list for those components that border fluid
 	borderCells.clear();
-
 	for (auto cell : fluidCells)
 		for (int c = 0; c < 3; ++c)
 		{
@@ -196,6 +202,8 @@ void MaCGrid::advanceField(const double timestep)
 
 void MaCGrid::applyConvection(const double timestep)
 {
+// Convect uses old velocity values of neighbors so a temporary variable is used this needs to be
+// swapped into the real velocity vector after all convection updates are complete
 #pragma omp parallel
 	for (auto cell : fluidCells)
 		cell->convect(*this, timestep);
@@ -232,6 +240,7 @@ void MaCGrid::externalForces(const double timestep)
 		cell->u += cell->mask.cwiseProduct(g);
 }
 
+// NOT USED
 void MaCGrid::applyViscosity(const double timestep)
 {
 #pragma omp parallel
@@ -259,10 +268,10 @@ void MaCGrid::applyViscosity(const double timestep)
 
 void MaCGrid::calcPressureField(const double timestep)
 {
-#if 0
-
+#if 1
 	Region region = volData.getEnclosingRegion();
 	int32_t z, y, x;
+	// Calculate the divergence of the velocity field and initialize the pressures to 0
 #pragma omp parallel for private(z)
 	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
 #pragma omp parallel for private(y) shared(z)
@@ -283,6 +292,10 @@ void MaCGrid::calcPressureField(const double timestep)
 				}
 				cell.p = cell.p2 = 0.0;
 			}
+
+	// Iteratively determine the pressure slowly converging to the correct solution two pressure
+	// variables are used as the new pressure after an iteration is dependent upon neighboring
+	// pressures
 	int iterations = 5;
 	for (int k = 0; k < iterations; k++)
 	{
@@ -319,6 +332,7 @@ void MaCGrid::calcPressureField(const double timestep)
 				}
 	}
 
+	// Apply the pressure to the velocity components
 #pragma omp parallel for private(z)
 	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
 #pragma omp parallel for private(y) shared(z)
@@ -456,8 +470,10 @@ void MaCGrid::extrapolate()
 {
 	set<GridCell *> from(fluidCells), to;
 
+	// Extrapolate the velocity into the border region of 2 wide
 	for (int i = 1; i < 2 /*TODO: max(2, k)*/; ++i)
 	{
+		// Determine the border of the current from region
 		for (auto cell : from)
 			for (int dir = -1; dir <= 1; dir += 2)
 				for (int c = 0; c < 3; ++c)
@@ -475,7 +491,9 @@ void MaCGrid::extrapolate()
 						to.insert(&neigh);
 					}
 				}
+
 #pragma omp parallel
+		// Calculate the average velocity of the neighbors as long as they are part of the previous layer
 		for (auto cell : to)
 		{
 			Vector3d sumVel = Vector3d::Zero();
@@ -510,6 +528,7 @@ void MaCGrid::fixSolidCellVelocities()
 {
 	Region region = volData.getEnclosingRegion();
 	int32_t z, y, x;
+	// Set the velocity components going into Solid objects to 0
 #pragma omp parallel for private(z)
 	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
 #pragma omp parallel for private(y) shared(z)
