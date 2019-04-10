@@ -546,8 +546,10 @@ void MaCGrid::moveParticles(const double timestep)
 	int i;
 #pragma omp parallel for schedule(runtime) private(i)
 	for (i = 0; i < marker_particles.rows(); i++)
+	{
 		marker_particles.row(i)
 			<< traceParticle(marker_particles.row(i).transpose(), timestep).transpose();
+	}
 }
 
 template <class input_t, class output_t, class step_t>
@@ -654,8 +656,11 @@ GridCell::GridCell(const Eigen::Vector3i &_coord, const int _layer, const CellTy
 
 void GridCell::convect(const MaCGrid &grid, const double timestep)
 {
-#if 1
-	u_temp = grid.traceParticle(coord.cast<double>(), -timestep);
+#if 0
+	auto p = coord.cast<double>();
+	auto V = grid.getVelocity(p);
+	V = grid.getVelocity(p + 0.5 * -timestep * V);
+	u_temp = V * -timestep;
 #else
 	Vector3d u_x = grid.traceParticle(coord.x(), coord.y() + 0.5, coord.z() + 0.5, -timestep);
 	Vector3d u_y = grid.traceParticle(coord.x() + 0.5, coord.y(), coord.z() + 0.5, -timestep);
