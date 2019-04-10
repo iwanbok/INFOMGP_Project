@@ -259,7 +259,7 @@ void MaCGrid::applyViscosity(const double timestep)
 
 void MaCGrid::calcPressureField(const double timestep)
 {
-#if 1
+#if 0
 
 	Region region = volData.getEnclosingRegion();
 	int32_t z, y, x;
@@ -372,7 +372,7 @@ void MaCGrid::calcPressureField(const double timestep)
 					triplets.emplace_back(cell->idx, neg_v.idx, 1);
 			}
 
-			divergence += pos_v.u(j) - neg_v.u(j); // cell->mask.cwiseProduct(cell->u)(j);
+			divergence += neg_v.u(j) - cell->u(j);
 		}
 
 #pragma omp critical
@@ -396,27 +396,25 @@ void MaCGrid::calcPressureField(const double timestep)
 	for (auto cell : fluidCells)
 	{
 		/*∇p(x,y,z) = (p(x,y,z)−p(x−1,y,z),p(x,y,z)−p(x,y−1,z),p(x,y,z)−p(x,y,z−1) ) */
-		Vector3d dp;
+		Vector3d dp = Vector3d::Zero();
 		for (int j = 0; j < 3; ++j)
 		{
 			auto c = cell->coord;
 			c(j) -= 1;
 			const auto &neigh = volData.getVoxel(c.x(), c.y(), c.z());
-			double neigh_pressure = 0;
-			if (neigh.type == AIR)
-				// atmospheric pressure at density 1
-				neigh_pressure = p_atm;
-			else if (neigh.idx >= 0)
+
+			// No pressure difference with a solid:
+			if (neigh.type == SOLID)
+				continue;
+
+			// atmospheric pressure at density 1
+			double neigh_pressure = p_atm;
+
+			// If the neighbor is a fluid cell, use that pressure:
+			if (neigh.idx >= 0)
 				neigh_pressure = p(neigh.idx);
-			c(j) += 2;
-			const auto &other = volData.getVoxel(c.x(), c.y(), c.z());
-			double other_pressure = 0;
-			if (other.type == AIR)
-				// atmospheric pressure at density 1
-				other_pressure = p_atm;
-			else if (other.idx >= 0)
-				other_pressure = p(neigh.idx);
-			dp(j) = neigh_pressure - other_pressure;
+
+			dp(j) = neigh_pressure - p(cell->idx);
 		}
 		cell->u -= timestep / density * dp;
 	}
@@ -424,29 +422,32 @@ void MaCGrid::calcPressureField(const double timestep)
 #pragma omp parallel
 	for (auto cell : borderCells)
 	{
-		Vector3d dp;
+		// A solid has no pressure difference
+		if (cell->type == SOLID)
+			continue;
+
+		Vector3d dp = Vector3d::Zero();
 		for (int j = 0; j < 3; ++j)
 		{
 			auto c = cell->coord;
 			c(j) -= 1;
 			const auto &neigh = volData.getVoxel(c.x(), c.y(), c.z());
-			double neigh_pressure = 0;
-			if (neigh.type == AIR)
-				// atmospheric pressure at density 1
-				neigh_pressure = p_atm;
-			else if (neigh.idx >= 0)
+
+			// No pressure difference with a solid:
+			if (neigh.type == SOLID)
+				continue;
+
+			// atmospheric pressure at density 1
+			double neigh_pressure = p_atm;
+
+			// If the neighbor is a fluid cell, use that pressure:
+			if (neigh.idx >= 0)
 				neigh_pressure = p(neigh.idx);
-			c(j) += 2;
-			const auto &other = volData.getVoxel(c.x(), c.y(), c.z());
-			double other_pressure = 0;
-			if (other.type == AIR)
-				// atmospheric pressure at density 1
-				other_pressure = p_atm;
-			else if (other.idx >= 0)
-				other_pressure = p(neigh.idx);
-			dp(j) = neigh_pressure - other_pressure;
+
+			dp(j) = neigh_pressure - p_atm;
 		}
-		cell->u -= cell->mask.cwiseProduct(timestep / density * dp);
+		cell->u -= cell->mask.cwiseProduct(timestep / /*Air with density of 1:*/ 1 * dp);
+		// cell->u -= timestep / density * dp;
 	}
 #endif
 }
