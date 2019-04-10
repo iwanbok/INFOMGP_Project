@@ -160,7 +160,7 @@ void Scene::updateScene(const double timeStep)
 
 bool Scene::loadScene(const string dataFolder, const string sceneFileName)
 {
-	ifstream sceneFileHandle, constraintFileHandle;
+	ifstream sceneFileHandle;
 	sceneFileHandle.open(dataFolder + string("/") + sceneFileName);
 	if (!sceneFileHandle.is_open())
 		return false;
@@ -208,4 +208,6 @@ bool Scene::loadScene(const string dataFolder, const string sceneFileName)
 
 		addMesh(objV, objF, objT, density, isFixed, userCOM, userOrientation);
 	}
+
+	return true;
 }
