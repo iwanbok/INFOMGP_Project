@@ -278,6 +278,7 @@ int main(int argc, char **argv)
 
 	initializeGrid();
 
+	mgpViewer.resize(1280, 1024);
 	mgpViewer.callback_pre_draw = &pre_draw;
 	mgpViewer.callback_key_down = &key_down;
 	mgpViewer.core.is_animating = false;
