@@ -97,6 +97,7 @@ void initializeMeshes()
 	// Append one more mesh for the fluid, which
 	// will be placed at i = scene.meshes.size()
 	mgpViewer.append_mesh();
+	mgpViewer.append_mesh();
 }
 
 void initializeGrid()
@@ -105,13 +106,17 @@ void initializeGrid()
 	MatrixXd initialParticles(1000000, 3);
 	int i = 0;
 	for (int x = -50; x < 50; x++)
-		for (int y = 450; y < 550; y++)
+		for (int y = -50; y < 50; y++)
 			for (int z = -50; z < 50; z++)
 			{
-				initialParticles.row(i) << x, y, z;
-				i++;
+				if (x * x + y * y + z * z < 2500)
+				{
+					initialParticles.row(i) << x, y + 500, z;
+					i++;
+				}
 			}
 	initialParticles /= 10;
+	initialParticles.conservativeResize(i, 3);
 	grid.addParticles(initialParticles);
 }
 

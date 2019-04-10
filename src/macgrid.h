@@ -64,6 +64,10 @@ class MaCGrid
 	// Simulate the fluid for the specified timestep
 	void simulate(const double timestep);
 
+	/// Display the voxel mesh for \p voxelType
+	igl::opengl::ViewerData &displayVoxelMesh(igl::opengl::glfw::Viewer &viewer, const int offset,
+											  CellType voxelType);
+
 	// Display the marker particles as spheres
 	// (Could be a const method, except that extractMarchingCubesMesh
 	//  takes volData as non-const pointer).
@@ -114,10 +118,12 @@ class MaCGrid
 
 class CustomController
 {
+	CellType which;
+
   public:
 	/// Used to inform the MarchingCubesSurfaceExtractor about which type it should use for
 	/// representing densities.
-	typedef CellType DensityType;
+	typedef int DensityType;
 	/// Used to inform the MarchingCubesSurfaceExtractor about which type it should use for
 	/// representing materials.
 	typedef CellType MaterialType;
@@ -131,9 +137,10 @@ class CustomController
 	 * hand, if the voxel type is 'float' then the representable range is -FLT_MAX to FLT_MAX and
 	 * the threshold will be set to zero.
 	 */
-	CustomController(void)
+	CustomController(CellType filter)
 	{
-		m_tThreshold = FLUID;
+		which = filter;
+		m_tThreshold = 1;
 	}
 
 	/**
@@ -144,7 +151,7 @@ class CustomController
 	 */
 	DensityType convertToDensity(GridCell voxel)
 	{
-		return voxel.type;
+		return voxel.type == which;
 	}
 
 	/**
@@ -191,9 +198,9 @@ class CustomController
 		return m_tThreshold;
 	}
 
-	void setThreshold(DensityType tThreshold)
+	void setThreshold(CellType _which)
 	{
-		m_tThreshold = tThreshold;
+		which = _which;
 	}
 
   private:

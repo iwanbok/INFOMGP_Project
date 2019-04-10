@@ -31,7 +31,7 @@ MaCGrid::MaCGrid(const double _h, const double _viscocity, const double _density
 				cell.coord << x, y, z;
 
 				// Make an (invisible) solid floor
-				if (!y)
+				if (x * x + y * y + z * z < 100)
 					cell.type = SOLID;
 			}
 }
@@ -50,9 +50,10 @@ void MaCGrid::simulate(const double timestep)
 	moveParticles(timestep);
 }
 
-void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
+igl::opengl::ViewerData &MaCGrid::displayVoxelMesh(igl::opengl::glfw::Viewer &viewer,
+												   const int offset, CellType voxelType)
 {
-	CustomController controller;
+	CustomController controller(voxelType);
 	auto mesh = extractMarchingCubesMesh(&volData, volData.getEnclosingRegion(), controller);
 	auto decoded = decodeMesh(mesh);
 	MatrixXd V(decoded.getNoOfVertices(), 3);
@@ -69,13 +70,21 @@ void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
 	for (int i = 0; i < decoded.getNoOfIndices(); i++)
 		T(i / 3, i % 3) = (int)decoded.getIndex(i);
 
-	RowVector3d fluidColor(0.2, 0.2, 0.8);
 	auto &viewData = viewer.data_list[offset];
 	viewData.clear();
 	viewData.set_mesh(V, T);
 	viewData.set_face_based(true);
-	viewData.set_colors(/* fluidColor */ colors);
+	viewData.set_colors(colors);
 	viewData.show_lines = false;
+	return viewData;
+}
+
+void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
+{
+	auto &fluidViewer = displayVoxelMesh(viewer, offset, FLUID);
+
+	auto &solidViewer = displayVoxelMesh(viewer, offset + 1, SOLID);
+	solidViewer.set_colors(RowVector3d{1, 0, 0});
 }
 
 void MaCGrid::updateGrid()
