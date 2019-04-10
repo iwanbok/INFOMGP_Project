@@ -24,7 +24,7 @@ class GridCell
 	int layer;				// layer to indicate fluid or distance to fluid
 	CellType type;			// Type of cell, either fluid, solid or air
 	int idx;
-
+	double p, p2, div;
 	GridCell();
 
 	GridCell(const Eigen::Vector3i &_coord, const int _layer, const CellType _type);

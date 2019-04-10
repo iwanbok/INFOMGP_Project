@@ -236,6 +236,87 @@ void MaCGrid::applyViscosity(const double timestep)
 
 void MaCGrid::calcPressureField(const double timestep)
 {
+#if 1
+
+	Region region = volData.getEnclosingRegion();
+	int32_t z, y, x;
+#pragma omp parallel for private(z)
+	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+		for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+			for (x = region.getLowerX(); x < region.getUpperX(); x++)
+			{
+				auto &cell = volData.getVoxelRef(x, y, z);
+				for (int j = 0; j < 3; ++j)
+				{
+					auto c = cell.coord;
+					c(j) += 1;
+					const auto &pos_v = volData.getVoxel(c.x(), c.y(), c.z());
+					c(j) -= 2;
+					const auto &neg_v = volData.getVoxel(c.x(), c.y(), c.z());
+
+					cell.div += pos_v.u(j) - neg_v.u(j);
+				}
+				cell.p = cell.p2 = 0.0;
+			}
+	int iterations = 5;
+	for (int k = 0; k < iterations; k++)
+	{
+#pragma omp parallel for private(z)
+		for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+			for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+				for (x = region.getLowerX(); x < region.getUpperX(); x++)
+				{
+					auto &cell = volData.getVoxelRef(x, y, z);
+					double sum = -cell.div;
+					for (int j = 0; j < 3; ++j)
+					{
+						auto c = cell.coord;
+						c(j) += 1;
+						const auto &pos_v = volData.getVoxel(c.x(), c.y(), c.z());
+						c(j) -= 2;
+						const auto &neg_v = volData.getVoxel(c.x(), c.y(), c.z());
+						sum += pos_v.p + neg_v.p;
+					}
+					cell.p2 = sum / 6;
+				}
+
+#pragma omp parallel for private(z)
+		for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+			for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+				for (x = region.getLowerX(); x < region.getUpperX(); x++)
+				{
+					auto &cell = volData.getVoxelRef(x, y, z);
+					cell.p = cell.p2;
+				}
+	}
+
+#pragma omp parallel for private(z)
+	for (z = region.getLowerZ(); z < region.getUpperZ(); z++)
+#pragma omp parallel for private(y) shared(z)
+		for (y = region.getLowerY(); y < region.getUpperY(); y++)
+#pragma omp parallel for private(x) shared(z, y)
+			for (x = region.getLowerX(); x < region.getUpperX(); x++)
+			{
+				auto &cell = volData.getVoxelRef(x, y, z);
+				for (int j = 0; j < 3; ++j)
+				{
+					auto c = cell.coord;
+					c(j) += 1;
+					const auto &pos_v = volData.getVoxel(c.x(), c.y(), c.z());
+					c(j) -= 2;
+					const auto &neg_v = volData.getVoxel(c.x(), c.y(), c.z());
+					cell.u(j) -= 0.5 * (pos_v.p - neg_v.p);
+				}
+			}
+
+#else
+
 	int size = fluidCells.size(); // TODO: fluidCells size
 	VectorXd b(size);
 	SparseMatrix<double> A(size, size);
@@ -277,7 +358,7 @@ void MaCGrid::calcPressureField(const double timestep)
 		// 					(u_yp1 ? 0 : volData.getVoxel(x, y + 1, z).u(1) - u_ym1 ? 0 : u(1)) +
 		// 					(u_zp1 ? 0 : volData.getVoxel(x, y, z + 1).u(2) - u_zm1 ? 0 : u(2));
 		/* Modified divergence ∇·u(x,y,z) =
-		 * (ux(x+1,y,z)−ux(x,y,z)) +(uy(x,y+1,z)−uy(x,y,z))+(uz(x,y,z+1)−uz(x,y,z))*/
+		 * (ux(x+1,y,z)−ux(x,y,z)) +(uy(x,y+1,z)−uy(x,y,z))+(uz(x,y,z+1)−uz(x,y,z)) */
 
 		// TODO: Account for atmospheric pressure as soon as we have a proper density!
 		b(cell->idx) = density * divergence / timestep - k_air;
@@ -291,7 +372,7 @@ void MaCGrid::calcPressureField(const double timestep)
 #pragma omp parallel
 	for (auto cell : fluidCells)
 	{
-		/*∇p(x,y,z) = (p(x,y,z)−p(x−1,y,z),p(x,y,z)−p(x,y−1,z),p(x,y,z)−p(x,y,z−1) )*/
+		/*∇p(x,y,z) = (p(x,y,z)−p(x−1,y,z),p(x,y,z)−p(x,y−1,z),p(x,y,z)−p(x,y,z−1) ) */
 		Vector3d dp;
 		for (int j = 0; j < 3; ++j)
 		{
@@ -344,6 +425,7 @@ void MaCGrid::calcPressureField(const double timestep)
 		}
 		cell->u -= cell->mask.cwiseProduct(timestep / density * dp);
 	}
+#endif
 }
 
 void MaCGrid::extrapolate()
