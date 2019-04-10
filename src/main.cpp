@@ -17,7 +17,7 @@ MatrixXi F;
 igl::opengl::glfw::Viewer mgpViewer;
 
 float currTime = 0;
-float timeStep = 0.02f;
+float timeStep = 0.2f;
 
 #ifndef ASSET_PATH
 #define ASSET_PATH "data"

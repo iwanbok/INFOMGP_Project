@@ -29,6 +29,10 @@ MaCGrid::MaCGrid(const double _h, const double _viscocity, const double _density
 			{
 				auto &cell = volData.getVoxelRef(x, y, z);
 				cell.coord << x, y, z;
+
+				// Make an (invisible) solid floor
+				if (!y)
+					cell.type = SOLID;
 			}
 }
 
@@ -52,12 +56,15 @@ void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
 	auto mesh = extractMarchingCubesMesh(&volData, volData.getEnclosingRegion(), controller);
 	auto decoded = decodeMesh(mesh);
 	MatrixXd V(decoded.getNoOfVertices(), 3);
+	MatrixXd colors(decoded.getNoOfVertices(), 3);
 	MatrixXi T(decoded.getNoOfIndices() / 3, 3);
 	for (int i = 0; i < V.rows(); i++)
 	{
 		auto vertex = decoded.getVertex(i).position +
 					  (Vector3DFloat)volData.getEnclosingRegion().getLowerCorner();
 		V.row(i) << vertex.getX(), vertex.getY(), vertex.getZ();
+		colors.row(i) << V.row(i) / 2.0;
+		colors.row(i).y() /= 10.0;
 	}
 	for (int i = 0; i < decoded.getNoOfIndices(); i++)
 		T(i / 3, i % 3) = (int)decoded.getIndex(i);
@@ -67,7 +74,7 @@ void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
 	viewData.clear();
 	viewData.set_mesh(V, T);
 	viewData.set_face_based(true);
-	viewData.set_colors(fluidColor);
+	viewData.set_colors(/* fluidColor */ colors);
 	viewData.show_lines = false;
 }
 
@@ -150,7 +157,7 @@ void MaCGrid::advanceField(const double timestep)
 	applyConvection(timestep);
 	externalForces(timestep);
 	// applyViscosity(timestep);
-	// calcPressureField(timestep);
+	calcPressureField(timestep);
 	extrapolate();
 	fixSolidCellVelocities();
 }
@@ -174,7 +181,10 @@ void MaCGrid::applyConvection(const double timestep)
 
 #pragma omp parallel
 	for (auto cell : borderCells)
+	{
 		cell->u = cell->u_temp;
+		cell->u_temp.setZero();
+	}
 }
 
 void MaCGrid::externalForces(const double timestep)
@@ -209,7 +219,10 @@ void MaCGrid::applyViscosity(const double timestep)
 
 #pragma omp parallel
 	for (auto cell : borderCells)
+	{
 		cell->u = cell->u_temp;
+		cell->u_temp.setZero();
+	}
 }
 
 void MaCGrid::calcPressureField(const double timestep)
@@ -231,14 +244,12 @@ void MaCGrid::calcPressureField(const double timestep)
 			auto c = cell->coord;
 			c(j) += 1;
 			const auto &pos_v = volData.getVoxel(c.x(), c.y(), c.z());
-			auto pos_solid = pos_v.type == SOLID;
+			nonSolid -= pos_v.type != SOLID;
+			k_air += pos_v.type == AIR;
 			c(j) -= 2;
 			const auto &neg_v = volData.getVoxel(c.x(), c.y(), c.z());
-			auto neg_solid = neg_v.type == SOLID;
-
-			nonSolid -= !pos_solid + !neg_solid;
-
-			k_air += (pos_v.type == AIR) + (neg_v.type == AIR);
+			nonSolid -= neg_v.type != SOLID;
+			k_air += neg_v.type == AIR;
 
 #pragma omp critical
 			{
@@ -248,7 +259,7 @@ void MaCGrid::calcPressureField(const double timestep)
 					triplets.emplace_back(cell->idx, neg_v.idx, 1);
 			}
 
-			divergence += pos_v.u(j) - cell->u(j);
+			divergence += pos_v.u(j) - cell->mask.cwiseProduct(cell->u)(j);
 		}
 
 #pragma omp critical
@@ -259,7 +270,8 @@ void MaCGrid::calcPressureField(const double timestep)
 		/* Modified divergence ∇·u(x,y,z) =
 		 * (ux(x+1,y,z)−ux(x,y,z)) +(uy(x,y+1,z)−uy(x,y,z))+(uz(x,y,z+1)−uz(x,y,z))*/
 
-		b(cell->idx) = divergence / timestep - k_air * p_atm;
+		// TODO: Account for atmospheric pressure as soon as we have a proper density!
+		b(cell->idx) = density * divergence / timestep - k_air; // * p_atm / 1000.0;
 	}
 
 	A.setFromTriplets(triplets.begin(), triplets.end());
@@ -276,10 +288,36 @@ void MaCGrid::calcPressureField(const double timestep)
 		{
 			auto c = cell->coord;
 			c(j) -= 1;
-			auto idx = volData.getVoxel(c.x(), c.y(), c.z()).idx;
-			dp(j) = p(cell->idx) - (idx >= 0 ? p(idx) : 0);
+			const auto &neigh = volData.getVoxel(c.x(), c.y(), c.z());
+			double neigh_pressure = 0;
+			if (neigh.type == AIR)
+				// atmospheric pressure at density 1
+				neigh_pressure = 1;
+			else if (neigh.idx >= 0)
+				neigh_pressure = p(neigh.idx);
+			dp(j) = p(cell->idx) - neigh_pressure;
 		}
 		cell->u -= timestep / density * dp;
+	}
+
+#pragma omp parallel
+	for (auto cell : borderCells)
+	{
+		Vector3d dp;
+		for (int j = 0; j < 3; ++j)
+		{
+			auto c = cell->coord;
+			c(j) -= 1;
+			const auto &neigh = volData.getVoxel(c.x(), c.y(), c.z());
+			double neigh_pressure = 0;
+			if (neigh.type == AIR)
+				// atmospheric pressure at density 1
+				neigh_pressure = 1;
+			else if (neigh.idx >= 0)
+				neigh_pressure = p(neigh.idx);
+			dp(j) = p(cell->idx) - neigh_pressure;
+		}
+		cell->u -= cell->mask.cwiseProduct(timestep / density * dp);
 	}
 }
 
@@ -388,6 +426,11 @@ Vector3d MaCGrid::traceParticle(double x, double y, double z, double t) const
 
 Vector3d MaCGrid::traceParticle(const Vector3d &p, double t) const
 {
+#if 1
+	auto V = getVelocity(p);
+	V = getVelocity(p + 0.5 * t * V);
+	return p + t * V;
+#else
 	Vector3d diff =
 		rk3<Vector3d, Vector3d, double>([&](Vector3d pos) { return getVelocity(pos); }, p, t);
 
@@ -395,6 +438,7 @@ Vector3d MaCGrid::traceParticle(const Vector3d &p, double t) const
 	Vector3d vel2 = getVelocity(p + t / 2 * vel1);
 	Vector3d vel3 = getVelocity(p + t * 3 / 4 * vel2);
 	return p + (vel1 * 2 + vel2 * 3 + vel3 * 4) * t / 9;
+#endif
 }
 
 /*inline MyFloat velXInterpolated(MyFloat x, MyFloat y) const
@@ -417,6 +461,16 @@ double MaCGrid::getInterpolatedValue(double x, double y, double z, int index) co
 	double i = std::floor(x);
 	double j = std::floor(y);
 	double k = std::floor(z);
+#if 1
+	return (i + 1 - x) * (j + 1 - y) * (k + 1 - z) * volData.getVoxel(i, j, k).u(index) +
+		   (x - i) * (j + 1 - y) * (k + 1 - z) * volData.getVoxel(i + 1, j, k).u(index) +
+		   (i + 1 - x) * (y - j) * (k + 1 - z) * volData.getVoxel(i, j + 1, k).u(index) +
+		   (x - i) * (y - j) * (k + 1 - z) * volData.getVoxel(i + 1, j + 1, k).u(index) +
+		   (i + 1 - x) * (j + 1 - y) * (z - k) * volData.getVoxel(i, j, k + 1).u(index) +
+		   (x - i) * (j + 1 - y) * (z - k) * volData.getVoxel(i + 1, j, k + 1).u(index) +
+		   (i + 1 - x) * (y - j) * (z - k) * volData.getVoxel(i, j + 1, k + 1).u(index) +
+		   (x - i) * (y - j) * (z - k) * volData.getVoxel(i + 1, j + 1, k + 1).u(index);
+#else
 	double x_frac = i - x;
 	double y_frac = j - y;
 	double z_frac = k - z;
@@ -439,6 +493,7 @@ double MaCGrid::getInterpolatedValue(double x, double y, double z, int index) co
 	double value_1 = (1 - y_frac) * value_01 + y_frac * value_11;
 
 	return (1 - z_frac) * value_0 + z_frac * value_1;
+#endif
 }
 
 GridCell::GridCell() : type(AIR), layer(-1), idx(-1)
@@ -457,12 +512,17 @@ GridCell::GridCell(const Eigen::Vector3i &_coord, const int _layer, const CellTy
 
 void GridCell::convect(const MaCGrid &grid, const double timestep)
 {
+#if 1
+	u_temp = grid.traceParticle(coord.cast<double>(), -timestep);
+#else
 	Vector3d u_x = grid.traceParticle(coord.x(), coord.y() + 0.5, coord.z() + 0.5, -timestep);
 	Vector3d u_y = grid.traceParticle(coord.x() + 0.5, coord.y(), coord.z() + 0.5, -timestep);
 	Vector3d u_z = grid.traceParticle(coord.x() + 0.5, coord.y() + 0.5, coord.z(), -timestep);
 	u_temp << grid.getInterpolatedValue(u_x.x(), u_x.y() - 0.5, u_x.z() - 0.5, 0),
 		grid.getInterpolatedValue(u_y.x() - 0.5, u_y.y(), u_y.z() - 0.5, 1),
 		grid.getInterpolatedValue(u_z.x() - 0.5, u_z.y() - 0.5, u_z.z(), 2);
+#endif
+	// For border cells
 	u_temp = u_temp.cwiseProduct(mask);
 }
 
