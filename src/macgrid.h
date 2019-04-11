@@ -52,6 +52,9 @@ class MaCGrid
 	Eigen::MatrixXd
 		marker_particles; // #P by 3 matrix of marker particles used to keep track of fluid.
 
+	Eigen::MatrixXd pV; // Particle vertices
+	Eigen::MatrixXi pT; // Particle triangles
+
 	double viscocity; // Kinematic viscosity
 	double density;   // Density of the fluid
 

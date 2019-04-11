@@ -14,9 +14,13 @@ using namespace Eigen;
 using namespace std;
 
 MaCGrid::MaCGrid(const double _h, const double _viscocity, const double _density)
-	: h(_h), viscocity(_viscocity), density(_density), marker_particles(0, 3),
+	: h(_h), viscocity(_viscocity), density(_density), marker_particles(0, 3), pV(4, 3), pT(4, 3),
 	  volData(Region(Vector3DInt32(-100, 0, -100), Vector3DInt32(100, 100, 100)))
 {
+	pV << 0.0, 0.0, -1.0, .5632993, -0.0942809, -0.0666667, 0.000000, .5885618, -0.0666667,
+		-.5632993, -0.0942809, -0.0666667;
+	pT << 3, 1, 0, 1, 2, 0, 2, 3, 0, 1, 3, 2;
+
 	volData.setBorderValue(GridCell(Vector3i::Zero(), -1, SOLID));
 	Region region = volData.getEnclosingRegion();
 	int32_t z, y, x;
@@ -109,8 +113,30 @@ igl::opengl::ViewerData &MaCGrid::displayVoxelMesh(igl::opengl::glfw::Viewer &vi
 void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
 {
 	// Fluid mesh
+#if 0
+	MatrixXd V(pV.rows() * marker_particles.rows(), pV.cols());
+	assert(pV.cols() == marker_particles.cols());
+	MatrixXi T(pT.rows() * marker_particles.rows(), pT.cols());
+
+	int i;
+#pragma omp parallel for schedule(runtime) private(i)
+	for (i = 0; i < marker_particles.rows(); i++)
+	{
+		V.block(i * pV.rows(), 0, pV.rows(), pV.cols()) = pV.rowwise() + marker_particles.row(i);
+		MatrixXi offset(pT.rows(), pT.cols());
+		offset.setConstant(i * pV.rows());
+		T.block(i * pT.rows(), 0, pT.rows(), pT.cols()) = pT + offset;
+	}
+	auto &viewData = viewer.data_list[offset];
+	viewData.clear();
+	viewData.set_mesh(V, T);
+	viewData.set_face_based(false);
+	viewData.set_colors(RowVector3d{0, 0, 1});
+	viewData.show_lines = false;
+#else
 	auto &fluidViewer = displayVoxelMesh(viewer, offset, FLUID);
 	fluidViewer.set_colors(RowVector3d{0, 0, 1});
+#endif
 
 	// Solid mesh
 	auto &solidViewer = displayVoxelMesh(viewer, offset + 1, SOLID);
@@ -494,7 +520,8 @@ void MaCGrid::extrapolate()
 				}
 
 #pragma omp parallel
-		// Calculate the average velocity of the neighbors as long as they are part of the previous layer
+		// Calculate the average velocity of the neighbors as long as they are part of the previous
+		// layer
 		for (auto cell : to)
 		{
 			Vector3d sumVel = Vector3d::Zero();
