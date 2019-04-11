@@ -112,10 +112,11 @@ void MaCGrid::displayFluid(igl::opengl::glfw::Viewer &viewer, const int offset)
 #if 1
 	auto &viewData = viewer.data_list[offset];
 	viewData.clear();
-	viewData.point_size = 2;
+	viewData.point_size = viewer.core.camera_zoom * .75f;
 	viewData.add_points(marker_particles, RowVector3d{0, 0, 1});
 	viewData.set_face_based(false);
 	viewData.show_lines = false;
+	cout << "Camera zoom is " << viewer.core.camera_zoom << endl;
 #else
 	auto &fluidViewer = displayVoxelMesh(viewer, offset, FLUID);
 	fluidViewer.set_colors(RowVector3d{0, 0, 1});
