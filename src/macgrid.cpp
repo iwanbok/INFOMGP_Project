@@ -395,8 +395,13 @@ void MaCGrid::calcPressureField(const double timestep)
 				if (neg_v.type == FLUID)
 					triplets.emplace_back(cell->idx, neg_v.idx, 1);
 			}
-
-			divergence += neg_v.u(j) - cell->u(j);
+			auto incoming_velocity = cell->u(j);
+			auto outgoing_velocity = pos_v.u(j);
+			if (neg_v.type == SOLID)
+				incoming_velocity = 0;
+			if (pos_v.type == SOLID)
+				outgoing_velocity = 0;
+			divergence += outgoing_velocity - incoming_velocity;
 		}
 
 #pragma omp critical
@@ -440,7 +445,7 @@ void MaCGrid::calcPressureField(const double timestep)
 
 			dp(j) = neigh_pressure - p(cell->idx);
 		}
-		cell->u -= timestep / density * dp;
+		cell->u += timestep / density * dp;
 	}
 
 #pragma omp parallel
@@ -470,7 +475,7 @@ void MaCGrid::calcPressureField(const double timestep)
 
 			dp(j) = neigh_pressure - p_atm;
 		}
-		cell->u -= cell->mask.cwiseProduct(timestep / /*Air with density of 1:*/ 1 * dp);
+		cell->u += cell->mask.cwiseProduct(timestep / /*Air with density of 1:*/ 1 * dp);
 		// cell->u -= timestep / density * dp;
 	}
 #endif
@@ -481,7 +486,7 @@ void MaCGrid::extrapolate()
 	set<GridCell *> from(fluidCells), to;
 
 	// Extrapolate the velocity into the border region of 2 wide
-	for (int i = 1; i < 2 /*TODO: max(2, k)*/; ++i)
+	for (int i = 1; i < 8 /*TODO: max(2, k)*/; ++i)
 	{
 		// Determine the border of the current from region
 		for (auto cell : from)
