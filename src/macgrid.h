@@ -50,10 +50,7 @@ class MaCGrid
 	std::set<GridCell *>
 		borderCells; // Set of cells which contain velocity components bordering fluid
 	Eigen::MatrixXd
-		marker_particles; // #P by 3 matrix of marker particles used to keep track of fluid.
-
-	Eigen::MatrixXd pV; // Particle vertices
-	Eigen::MatrixXi pT; // Particle triangles
+		marker_particles; // #P by 3 matrix of marker particles used to keep track of fluid.s
 
 	double viscocity; // Kinematic viscosity
 	double density;   // Density of the fluid
